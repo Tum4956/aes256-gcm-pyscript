@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AES-256-GCM Encryption Demo (PyScript)</title>
+    
+    <!-- PyScript CSS & JS (v2024.1.1) -->
+    <link rel="stylesheet" href="https://pyscript.net/releases/2024.1.1/core.css">
+    <script type="module" src="https://pyscript.net/releases/2024.1.1/core.js"></script>
+    
+    <!-- Tailwind CSS สำหรับจัดตกแต่ง UI -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- ติดตั้ง Python Packages ผ่าน py-config -->
+    <py-config>
+        packages = ["cryptography"]
+    </py-config>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-6 font-sans">
+    <div class="max-w-4xl mx-auto space-y-6">
+        
+        <!-- Header -->
+        <header class="text-center border-b border-slate-700 pb-4">
+            <h1 class="text-3xl font-bold text-indigo-400">AES-256-GCM Encryption & Decryption</h1>
+            <p class="text-slate-400 text-sm mt-1">ขับเคลื่อนด้วย Python (`cryptography`) ผ่าน PyScript บน Web Browser</p>
+        </header>
+
+        <!-- Input Section -->
+        <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 shadow-lg space-y-4">
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-1">ข้อความที่ต้องการเข้ารหัส (Plaintext Input):</label>
+                <textarea id="input_text" rows="3" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500" placeholder="พิมพ์ข้อความที่นี่..."></textarea>
+            </div>
+            
+            <button py-click="process_aes" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-medium py-2.5 px-4 rounded-lg transition duration-200 shadow-md">
+                🔒 ประมวลผล เข้ารหัส และ ถอดรหัส (Run AES-GCM)
+            </button>
+        </div>
+
+        <!-- AES-256-GCM Block Visual Layout -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            
+            <!-- Encryption Process Side -->
+            <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 shadow-lg space-y-4">
+                <h2 class="text-lg font-semibold text-emerald-400 border-b border-slate-700 pb-2">1. การเข้ารหัส (Encryption Outputs)</h2>
+                
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">AES-256 Key (Hex 64 Chars / 32 Bytes):</label>
+                    <div id="out_key" class="bg-slate-950 p-2.5 rounded font-mono text-xs text-emerald-300 break-all min-h-[38px] flex items-center">-</div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Initialization Vector / Nonce (Hex 24 Chars / 12 Bytes):</label>
+                    <div id="out_iv" class="bg-slate-950 p-2.5 rounded font-mono text-xs text-cyan-300 break-all min-h-[38px] flex items-center">-</div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Ciphertext (Hex):</label>
+                    <div id="out_ciphertext" class="bg-slate-950 p-2.5 rounded font-mono text-xs text-amber-300 break-all min-h-[38px] flex items-center">-</div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Authentication Tag (Hex 32 Chars / 16 Bytes):</label>
+                    <div id="out_tag" class="bg-slate-950 p-2.5 rounded font-mono text-xs text-rose-300 break-all min-h-[38px] flex items-center">-</div>
+                </div>
+            </div>
+
+            <!-- Decryption Process Side -->
+            <div class="bg-slate-800 rounded-xl p-5 border border-slate-700 shadow-lg space-y-4 flex flex-col justify-between">
+                <div>
+                    <h2 class="text-lg font-semibold text-sky-400 border-b border-slate-700 pb-2">2. การถอดรหัส (Decryption Verification)</h2>
+                    <p class="text-xs text-slate-400 mt-2 mb-4">นำ Key + IV + Ciphertext + Auth Tag กลับมาถอดรหัสเพื่อตรวจสอบความถูกต้องของข้อมูล</p>
+                    
+                    <label class="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Plaintext ที่ถอดรหัสได้ (Decrypted Result):</label>
+                    <div id="out_decrypted" class="bg-slate-950 p-3 rounded font-mono text-sm text-sky-300 break-all min-h-[100px] border border-sky-900/50 flex items-start">-</div>
+                </div>
+
+                <div class="bg-slate-900 p-3 rounded-lg border border-slate-700/60 text-xs text-slate-400 space-y-1">
+                    <p><span class="font-semibold text-slate-200">GCM Mode Feature:</span> AES-GCM เป็นการเข้ารหัสแบบ Authenticated Encryption (AEAD) หาก Data หรือ Tag โดนแก้ไขแม้แต่ Bit เดียว การถอดรหัสจะล้มเหลวทันที</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- PyScript Python Script -->
+    <script type="py">
+import os
+from pyscript import document
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+def process_aes(event):
+    # 1. รับค่าข้อความจาก Input Textarea
+    plaintext_input = document.getElementById("input_text").value
+    
+    if not plaintext_input:
+        document.getElementById("out_key").innerText = "กรุณากรอกข้อความก่อนประมวลผล"
+        return
+        
+    plaintext_bytes = plaintext_input.encode('utf-8')
+    
+    # 2. สุ่มสร้าง Key ขนาด 256 บิต (32 บิตไบต์) และ Nonce/IV ขนาด 96 บิต (12 บิตไบต์)
+    key = AESGCM.generate_key(bit_length=256)
+    nonce = os.urandom(12)
+    
+    # 3. เข้ารหัสด้วย AES-256-GCM
+    aesgcm = AESGCM(key)
+    # ใน Python `cryptography` ฟังก์ชัน encrypt จะคืนค่า ciphertext + 16-byte tag ต่อท้ายกัน
+    encrypted_payload = aesgcm.encrypt(nonce, plaintext_bytes, associated_data=None)
+    
+    # แยก Ciphertext และ Authentication Tag ออกจากกันเพื่อการแสดงผล
+    ciphertext = encrypted_payload[:-16]
+    auth_tag = encrypted_payload[-16:]
+    
+    # 4. ถอดรหัสกลับ (Decryption Test)
+    try:
+        decrypted_bytes = aesgcm.decrypt(nonce, encrypted_payload, associated_data=None)
+        decrypted_text = decrypted_bytes.decode('utf-8')
+    except Exception as e:
+        decrypted_text = f"Decryption Failed: {str(e)}"
+        
+    # 5. แสดงผลลัพธ์เป็น Hex บนหน้า Web UI
+    document.getElementById("out_key").innerText = key.hex()
+    document.getElementById("out_iv").innerText = nonce.hex()
+    document.getElementById("out_ciphertext").innerText = ciphertext.hex()
+    document.getElementById("out_tag").innerText = auth_tag.hex()
+    document.getElementById("out_decrypted").innerText = decrypted_text
+    </script>
+</body>
+</html>
